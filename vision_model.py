@@ -11,7 +11,11 @@ class VisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.conv = nn.Conv2d(
-            in_channels=3, out_channels=1, kernel_size=3, padding="same"
+            in_channels=3,
+            out_channels=config.img_patch_embedding_size,
+            kernel_size=config.img_patch_size,
+            stride=config.img_patch_size,
+            padding="valid",
         )
         self.norm = nn.LayerNorm(
             (self.config.img_patch_size, self.config.img_patch_size)
@@ -36,50 +40,18 @@ class VisionEncoder(nn.Module):
         output: B x Patch-H x Patch-W x Patch-embeeding
         """
         B, H, W, C = x.size()
+        assert C == 3 or C == 1
         assert H == self.config.img_size
         assert W == self.config.img_size
 
-        x = x.view(B, self.config.img_h_patches, self.config.img_patch_size, W, C)
-        x = x.view(
-            B,
-            self.config.img_h_patches,
-            self.config.img_patch_size,
-            self.config.img_patch_size,
-            self.config.img_w_patches,
-            C,
-        )
-        x = x.permute(
-            0, 1, 4, 5, 2, 3
-        )  # B x H_PATCHES x 16 x 16 x W_PATCHES x C => B x H_PATCHES x W_PATCHES x C x 16 x 16
-        x = x.reshape(
-            -1, C, self.config.img_patch_size, self.config.img_patch_size
-        )  # B x H_PATCHES x W_PATCHES x C x 16 x 16 => B16 x C x 16 x 16
-        x = self.norm(x)  # => B16 x C x 16 x 16
-        x = self.conv(x)  #  B16 x C x 16 x 16 =>  B16 x 1 x 16 x 16
+        # [B x H x W x C] => [B x C x H x W]
+        x = x.permute(0, 3, 1, 2)
 
-        x = x.view(-1, self.config.img_patch_size**2)  # => B16 x 256
-        x = self.linear(x)  # => B16 x Patch_Emb
+        # [B x C x H x W] => [B x H_PATCHES x W_PATCHES x IMG_PATCH_EMB]
+        x = self.conv(x)
 
-        x = x.view(
-            B,
-            self.config.img_h_patches * self.config.img_w_patches,
-            self.config.img_patch_embedding_size,
-        )  # => B x H_PATCHES * W_PATCHES x PATCH_EMB
-
-        x = x + self.pos_embeddings(
-            torch.arange(
-                0,
-                self.config.img_h_patches * self.config.img_w_patches,
-                dtype=torch.int,
-                device=self.device,
-            )
-        )
-
-        x = x.view(
-            B,
-            self.config.img_h_patches * self.config.img_w_patches,
-            self.config.img_patch_embedding_size,
-        )  # => B x Img_Patches x Img_Patch_Emb
+        # [B x H_PATCHES x W_PATCHES x IMG_PATCH_EMB] => [B x PATCHES x IMG_PATCH_EMB]
+        x = x.view(B, -1, self.config.img_patch_embedding_size)
 
         return x
 
@@ -104,6 +76,7 @@ class VisionTransformerBlock(nn.Module):
         output: B x Img_Emb
         """
         B, IMG_PATCHES, IMG_PATH_EMBEDDING = x.size()
+        x_clone = x.clone()
 
         # Normalization
         x = self.norm(x)  # => B x Img_Patches x Img_Patch_Emb
@@ -139,6 +112,9 @@ class VisionTransformerBlock(nn.Module):
         # FF layer
         x = self.linear(x)
         x = F.relu(x)
+
+        # Residue network
+        x = x + x_clone
         return x
 
 

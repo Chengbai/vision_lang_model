@@ -9,7 +9,6 @@ class Config:
     img_size: int = 448
     img_patch_size: int = 32
     img_patch_embedding_size = 10
-    embedding_size = 1024
 
     # imge transformer
     img_multiheads = 8
