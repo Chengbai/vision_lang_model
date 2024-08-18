@@ -6,7 +6,7 @@ from config import Config
 from typing import OrderedDict
 
 
-class VisionEncoder(nn.Module):
+class ImgTokenizer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
@@ -144,7 +144,7 @@ class VisionModel(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
-        self.vision_encoder = VisionEncoder(config)
+        self.Img_tokenizer = ImgTokenizer(config)
         self.vision_transformer = VisionTransformer(config)
 
     def forward(self, img: torch.tensor) -> torch.tensor:
@@ -152,6 +152,6 @@ class VisionModel(nn.Module):
         img: B x H x W x C
         output: B x Embedding
         """
-        x = self.vision_encoder(img)
+        x = self.Img_tokenizer(img)
         x = self.vision_transformer(x)
         return x
