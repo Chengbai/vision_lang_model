@@ -103,6 +103,8 @@ class VisionTransformerBlock(nn.Module):
         x: B x Img_Patches x Img_Patch_Emb
         output: B x Img_Emb
         """
+        B, IMG_PATCHES, IMG_PATH_EMBEDDING = x.size()
+
         # Normalization
         x = self.norm(x)  # => B x Img_Patches x Img_Patch_Emb
 
@@ -110,13 +112,26 @@ class VisionTransformerBlock(nn.Module):
         qkv = (
             x @ self.qkv
         )  # [B x Img_Patches x Img_Patch_Emb] @ [Img_Patch_Emb x 3-Img_Hidden] => [B x Img_Patches x 3-Img_Hidden]
-        q, k, v = torch.chunk(qkv, 3, dim=2)  # => B x Img_Patches x Img_Hidden
+
+        # Multihead attention
+        qkv = qkv.view(
+            B, IMG_PATCHES, self.config.img_multiheads, -1
+        )  # B x Img_Patches x HEADS x 3-HEAD_EMBEDDING
+        qkv = torch.permute(
+            qkv, (0, 2, 1, 3)
+        )  # B x HEADS x Img_Patches x 3-HEAD_EMBEDDING
+        q, k, v = torch.chunk(
+            qkv, 3, dim=3
+        )  # => B x HEADS x Img_Patches x HEAD_EMBEDDING
+
         atten = q @ k.transpose(
-            1, 2
-        )  # [B x Img_Patches x Img_Hidden] @ [B x Img_Hidden x Img_Patches] => [B x Img_Patches x Img_Patches]
+            2, 3
+        )  # [B x HEADS x Img_Patches x HEAD_EMBEDDING] @ [B x HEADS x HEAD_EMBEDDING x Img_Patches] => [B x HEADS x Img_Patches x Img_Patches]
         x = (
             atten @ v
-        )  # [B x Img_Patches x Img_Patches] @ [B x Img_Patches x Img_Hidden] => [B x Img_Patches x Img_Hidden]
+        )  # [B x HEADS x Img_Patches x Img_Patches] @ [B x HEADS x Img_Patches x HEAD_EMBEDDING] => [B x HEADS x Img_Patches x HEAD_EMBEDDING]
+        x = x.transpose(1, 2)  # => [B x Img_Patches x HEADS x HEAD_EMBEDDING]
+        x = x.reshape(B, IMG_PATCHES, -1)
 
         # Dropout
         x = self.dopout(x)

@@ -12,6 +12,7 @@ class Config:
     embedding_size = 1024
 
     # imge transformer
+    img_multiheads = 8
     img_transformer_blocks = 3
     img_transformer_hidden_size = 1024
     img_dropout = 0.0
